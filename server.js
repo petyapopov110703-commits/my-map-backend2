@@ -2,7 +2,6 @@
 
 // Подключаем библиотеки
 const express = require('express');
-// const puppeteer = require('puppeteer'); // Импортируем в функции, чтобы не загружался при запуске, если не нужен
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,21 +26,24 @@ let lastFetchTime = null;
 // Функция для парсинга данных
 async function fetchDataAndCache() {
     console.log('Запуск автоматического парсинга...');
-    // const puppeteer = require('puppeteer'); // УБРАТЬ ЭТУ СТРОКУ
-    const puppeteer = require('puppeteer-core'); // <- ПОМЕНЯТЬ НА puppeteer-core
+    const puppeteer = require('puppeteer-core'); // <- puppeteer-core, не puppeteer
 
     try {
-        // На Render используем системный Chrome
+        // На Render используем системный Chrome, НЕ указываем executablePath
         const browser = await puppeteer.launch({
             headless: 'new', // Используем новый headless режим
-            executablePath: '/usr/bin/google-chrome-stable', // Указываем путь к установленному Chrome
+            // executablePath: '/usr/bin/google-chrome-stable', // УБРАТЬ ЭТУ СТРОКУ
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-gpu',
                 '--disable-dev-shm-usage',
                 '--disable-software-rasterizer',
-                '--disable-web-security'
+                '--disable-web-security',
+                '--disable-extensions', // Добавим для надёжности
+                '--disable-background-timer-throttling', // Добавим для надёжности
+                '--disable-backgrounding-occluded-windows', // Добавим для надёжности
+                '--disable-renderer-backgrounding' // Добавим для надёжности
             ]
         });
         const page = await browser.newPage();
