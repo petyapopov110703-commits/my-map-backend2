@@ -83,20 +83,31 @@ async function fetchDataAndCache() {
                 }
                 const price = priceElement ? priceElement.innerText.trim() : 'Цена не найдена';
 
-                // --- ПАРСИМ ИЗОБРАЖЕНИЕ ---
-                // Ищем элемент img внутри .hotel-card__slide
-                const imgElement = card.querySelector('.hotel-card__slide img'); // Ищем img внутри .hotel-card__slide
-                let imageSrc = 'https://via.placeholder.com/300x200?text=No+Image'; // Заглушка
-                if (imgElement) {
-                    // Получаем src
-                    imageSrc = imgElement.getAttribute('src') || imageSrc;
+                // --- ПАРСИМ ВСЕ ИЗОБРАЖЕНИЯ ---
+                // Ищем все элементы img внутри .hotel-card__slide
+                const imgElements = card.querySelectorAll('.hotel-card__slide img'); // Получаем все img
+                let imageUrls = []; // Массив для хранения URL всех изображений
+
+                if (imgElements.length > 0) {
+                    // Проходим по всем img и получаем src
+                    imgElements.forEach(img => {
+                        const src = img.getAttribute('src');
+                        if (src) {
+                            imageUrls.push(src);
+                        }
+                    });
+                }
+
+                // Если нет изображений, добавляем заглушку
+                if (imageUrls.length === 0) {
+                    imageUrls.push('https://via.placeholder.com/300x200?text=No+Image');
                 }
 
                 // Возвращаем объект с данными (используем английские ключи)
                 return {
                     title: title,
                     price: price,
-                    imageSrc: imageSrc // <-- Добавляем поле с изображением
+                    imageUrls: imageUrls // <-- Теперь массив URL изображений
                 };
             });
         });
@@ -108,7 +119,7 @@ async function fetchDataAndCache() {
             id: index + 1,
             title: obj.title, // <-- используем согласованный ключ
             price: obj.price, // <-- используем согласованный ключ
-            imageSrc: obj.imageSrc, // <-- используем согласованный ключ
+            imageUrls: obj.imageUrls, // <-- используем согласованный ключ
             // ВНИМАНИЕ: координаты фиктивные, нужно добавить реальные
             coords: [55.0 + index * 0.001, 37.0 + index * 0.001]
         }));
