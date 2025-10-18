@@ -36,7 +36,7 @@ async function fetchDataAndCache() {
     const page = await browser.newPage();
 
     // Пример: переход на сайт и извлечение данных
-    await page.goto('https://example.com', { waitUntil: 'networkidle2' }); // Замените на ваш URL
+    await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2' }); // Замените на ваш URL
 
     // Пример извлечения данных
     const data = await page.evaluate(() => {
@@ -104,3 +104,4 @@ app.listen(PORT, '0.0.0.0', () => {
   // Запуск автоматического парсинга при старте сервера
   fetchDataAndCache();
 });
+
