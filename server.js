@@ -1,3 +1,4 @@
+// Подключаем библиотеки
 const express = require('express');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
@@ -50,6 +51,22 @@ async function fetchDataAndCache() {
 
         // Переходим на сайт
         await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2', timeout: 30000 });
+
+        console.log('Ожидаем появления таба "На карте"...');
+
+        // --- ЖДЕМ, ПОКА ПОЯВИТСЯ ТАБ "НА КАРТЕ" ---
+        try {
+            // Ищем таб "На карте"
+            const mapTab = await page.waitForSelector('text=На карте', { timeout: 15000 });
+            console.log('Таб "На карте" найден.');
+
+            // Кликаем по табу "На карте"
+            await mapTab.click();
+            console.log('Кликнули по табу "На карте".');
+        } catch (waitError) {
+            console.error('Ошибка ожидания таба "На карте":', waitError.message);
+            throw waitError;
+        }
 
         console.log('Ожидаем появления маркеров...');
 
