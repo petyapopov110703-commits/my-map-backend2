@@ -27,11 +27,13 @@ let lastFetchTime = null;
 // Функция для парсинга данных
 async function fetchDataAndCache() {
     console.log('Запуск автоматического парсинга...');
-    const puppeteer = require('puppeteer'); // Импортируем внутри функции
+    // const puppeteer = require('puppeteer'); // УБРАТЬ ЭТУ СТРОКУ
+    const puppeteer = require('puppeteer-core'); // <- ПОМЕНЯТЬ НА puppeteer-core
+
     try {
-        // На некоторых хостингах (например, Render) могут потребоваться аргументы для headless Chrome
-       const browser = await puppeteer.launch({
-            headless: 'new',
+        // На Render используем системный Chrome
+        const browser = await puppeteer.launch({
+            headless: 'new', // Используем новый headless режим
             executablePath: '/usr/bin/google-chrome-stable', // Указываем путь к установленному Chrome
             args: [
                 '--no-sandbox',
@@ -139,4 +141,3 @@ app.listen(PORT, () => {
 }).on('error', (err) => {
     console.error('Ошибка при запуске сервера:', err);
 });
-
