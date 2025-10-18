@@ -29,13 +29,11 @@ async function fetchDataAndCache() {
     const puppeteer = require('puppeteer-core'); // <- puppeteer-core, не puppeteer
 
     try {
-        // На Render используем системный Chrome, УКАЗЫВАЕМ executablePath
+        // На Render используем системный Chrome, УКАЗЫВАЕМ АЛЬТЕРНАТИВНЫЙ executablePath
         const browser = await puppeteer.launch({
             headless: 'new', // Используем новый headless режим
-            executablePath: '/usr/bin/google-chrome-stable', // <- Путь к установленному Chrome
-            // Альтернативные пути, если /usr/bin/google-chrome-stable не работает:
-            // executablePath: '/opt/render/project/.apt/usr/bin/google-chrome-stable', // Иногда Chrome устанавливается сюда
-            // executablePath: '/opt/render/project/.apt/usr/bin/chromium-browser', // Иногда Chromium
+            executablePath: '/opt/render/project/.apt/usr/bin/google-chrome-stable', // <- АЛЬТЕРНАТИВНЫЙ путь к установленному Chrome
+            // executablePath: '/usr/bin/google-chrome-stable', // <- Оригинальный путь, который не сработал
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
