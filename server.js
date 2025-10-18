@@ -29,10 +29,13 @@ async function fetchDataAndCache() {
     const puppeteer = require('puppeteer-core'); // <- puppeteer-core, не puppeteer
 
     try {
-        // На Render используем системный Chrome, НЕ указываем executablePath
+        // На Render используем системный Chrome, УКАЗЫВАЕМ executablePath
         const browser = await puppeteer.launch({
             headless: 'new', // Используем новый headless режим
-            // executablePath: '/usr/bin/google-chrome-stable', // УБРАТЬ ЭТУ СТРОКУ
+            executablePath: '/usr/bin/google-chrome-stable', // <- Путь к установленному Chrome
+            // Альтернативные пути, если /usr/bin/google-chrome-stable не работает:
+            // executablePath: '/opt/render/project/.apt/usr/bin/google-chrome-stable', // Иногда Chrome устанавливается сюда
+            // executablePath: '/opt/render/project/.apt/usr/bin/chromium-browser', // Иногда Chromium
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -40,10 +43,10 @@ async function fetchDataAndCache() {
                 '--disable-dev-shm-usage',
                 '--disable-software-rasterizer',
                 '--disable-web-security',
-                '--disable-extensions', // Добавим для надёжности
-                '--disable-background-timer-throttling', // Добавим для надёжности
-                '--disable-backgrounding-occluded-windows', // Добавим для надёжности
-                '--disable-renderer-backgrounding' // Добавим для надёжности
+                '--disable-extensions',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ]
         });
         const page = await browser.newPage();
