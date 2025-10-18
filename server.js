@@ -70,13 +70,13 @@ async function fetchDataAndCache() {
 
         console.log('Ожидаем появления маркеров...');
 
-        // --- ЖДЕМ, ПОКА ПОЯВЯТСЯ МАРКЕРЫ (ymaps.ymaps3x0--marker) ---
+        // --- ЖДЕМ, ПОКА ПОЯВЯТСЯ МАРКЕРЫ (.custom-marker) ---
         try {
-            // Ожидаем, пока появится хотя бы один маркер Яндекс Карт
-            await page.waitForSelector('ymaps.ymaps3x0--marker', { timeout: 15000 });
-            console.log('Найдены маркеры Яндекс Карт.');
+            // Ожидаем, пока появится хотя бы один .custom-marker
+            await page.waitForSelector('.custom-marker', { timeout: 15000 });
+            console.log('Найдены маркеры (.custom-marker).');
         } catch (waitError) {
-            console.error('Ошибка ожидания маркеров Яндекс Карт:', waitError.message);
+            console.error('Ошибка ожидания маркеров (.custom-marker):', waitError.message);
             throw waitError;
         }
 
@@ -85,16 +85,16 @@ async function fetchDataAndCache() {
         // --- ПАРСИНГ ДАННЫХ ДЛЯ КАЖДОГО МАРКЕРА ---
         const objectsData = [];
 
-        // Получаем все маркеры Яндекс Карт (ymaps.ymaps3x0--marker)
-        const ymapsMarkers = await page.$$('.ymaps3x0--marker');
+        // Получаем все .custom-marker
+        const customMarkers = await page.$$('.custom-marker');
 
-        for (let i = 0; i < ymapsMarkers.length; i++) {
-            console.log(`Обработка маркера ${i + 1} из ${ymapsMarkers.length}...`);
+        for (let i = 0; i < customMarkers.length; i++) {
+            console.log(`Обработка маркера ${i + 1} из ${customMarkers.length}...`);
 
-            // Кликаем на маркер Яндекс Карт
-            await ymapsMarkers[i].click();
+            // Кликаем на .custom-marker
+            await customMarkers[i].click();
 
-            // Ждём появление контейнера с карточками (например, .card.fixed или .popup)
+            // Ждём появление контейнера с карточками (например, .card.fixed)
             // Судя по видео, это может быть div с классом .card fixed
             const cardContainerSelector = '.card.fixed, .popup, .modal';
             try {
@@ -158,40 +158,35 @@ async function fetchDataAndCache() {
                 };
             });
 
-            // --- ИЗВЛЕЧЕНИЕ КООРДИНАТ ИЗ data-marker-id (находим .custom-marker внутри ymaps.ymaps3x0--marker) ---
+            // --- ИЗВЛЕЧЕНИЕ КООРДИНАТ ИЗ data-marker-id ---
             let coords = [55.0, 37.0]; // Фиктивные координаты по умолчанию
 
-            // Ищем .custom-marker внутри текущего ymaps.ymaps3x0--marker
-            const customMarkerHandle = await ymapsMarkers[i].$(('.custom-marker'));
-            if (customMarkerHandle) {
-                const markerId = await customMarkerHandle.evaluate(el => el.getAttribute('data-marker-id'));
-                if (markerId) {
-                    // Убираем префикс 'group_' перед разбором
-                    const cleanedMarkerId = markerId.replace(/^group_/, '');
-                    // Разбиваем строку по запятой
-                    const parts = cleanedMarkerId.split(',');
-                    if (parts.length >= 2) {
-                        // Берем последние два числа как долготу и широту
-                        const lonStr = parts[parts.length - 2];
-                        const latStr = parts[parts.length - 1];
+            // Извлекаем data-marker-id из текущего .custom-marker
+            const markerId = await customMarkers[i].evaluate(el => el.getAttribute('data-marker-id'));
+            if (markerId) {
+                // Убираем префикс 'group_' перед разбором
+                const cleanedMarkerId = markerId.replace(/^group_/, '');
+                // Разбиваем строку по запятой
+                const parts = cleanedMarkerId.split(',');
+                if (parts.length >= 2) {
+                    // Берем последние два числа как долготу и широту
+                    const lonStr = parts[parts.length - 2];
+                    const latStr = parts[parts.length - 1];
 
-                        const lon = parseFloat(lonStr);
-                        const lat = parseFloat(latStr);
+                    const lon = parseFloat(lonStr);
+                    const lat = parseFloat(latStr);
 
-                        if (!isNaN(lon) && !isNaN(lat)) {
-                            coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
-                            console.log(`Найдены координаты для "${objectData.title}": [${lat}, ${lon}]`);
-                        } else {
-                            console.warn(`Не удалось распарсить координаты для "${objectData.title}": lon=${lonStr}, lat=${latStr} (исходный markerId: ${markerId})`);
-                        }
+                    if (!isNaN(lon) && !isNaN(lat)) {
+                        coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
+                        console.log(`Найдены координаты для "${objectData.title}": [${lat}, ${lon}]`);
                     } else {
-                        console.warn(`Неверный формат data-marker-id для "${objectData.title}": "${markerId}"`);
+                        console.warn(`Не удалось распарсить координаты для "${objectData.title}": lon=${lonStr}, lat=${latStr} (исходный markerId: ${markerId})`);
                     }
                 } else {
-                    console.warn(`data-marker-id пустой для "${objectData.title}"`);
+                    console.warn(`Неверный формат data-marker-id для "${objectData.title}": "${markerId}"`);
                 }
             } else {
-                console.warn(`.custom-marker не найден внутри ymaps.ymaps3x0--marker ${i + 1}.`);
+                console.warn(`data-marker-id пустой для "${objectData.title}"`);
             }
 
             // Добавляем ID
