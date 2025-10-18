@@ -58,7 +58,7 @@ async function fetchDataAndCache() {
         await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 15000 });
         console.log('Найдены карточки объектов, начинаем парсинг...');
 
-        // --- ИСПРАВЛЕННЫЙ БЛОК page.evaluate ---
+        // --- ИЗМЕНЁННЫЙ БЛОК page.evaluate ---
         const objectsData = await page.evaluate(() => {
             // Ищем карточки (обычные и с .map)
             const hotelCards = Array.from(document.querySelectorAll('.hotel-card, .hotel-card.map'));
@@ -83,10 +83,20 @@ async function fetchDataAndCache() {
                 }
                 const price = priceElement ? priceElement.innerText.trim() : 'Цена не найдена';
 
+                // --- ПАРСИМ ИЗОБРАЖЕНИЕ ---
+                // Ищем элемент img внутри .hotel-card__slide
+                const imgElement = card.querySelector('.hotel-card__slide img'); // Ищем img внутри .hotel-card__slide
+                let imageSrc = 'https://via.placeholder.com/300x200?text=No+Image'; // Заглушка
+                if (imgElement) {
+                    // Получаем src
+                    imageSrc = imgElement.getAttribute('src') || imageSrc;
+                }
+
                 // Возвращаем объект с данными (используем английские ключи)
                 return {
-                    title: title, // <-- теперь согласованно
-                    price: price  // <-- теперь согласованно
+                    title: title,
+                    price: price,
+                    imageSrc: imageSrc // <-- Добавляем поле с изображением
                 };
             });
         });
@@ -98,6 +108,7 @@ async function fetchDataAndCache() {
             id: index + 1,
             title: obj.title, // <-- используем согласованный ключ
             price: obj.price, // <-- используем согласованный ключ
+            imageSrc: obj.imageSrc, // <-- используем согласованный ключ
             // ВНИМАНИЕ: координаты фиктивные, нужно добавить реальные
             coords: [55.0 + index * 0.001, 37.0 + index * 0.001]
         }));
