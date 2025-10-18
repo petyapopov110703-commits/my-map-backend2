@@ -1,15 +1,17 @@
 {
-  "name": "my-map-backend",
+  "name": "my-map-backend2",
   "version": "1.0.0",
-  "description": "",
+  "description": "Парсер для сайта на тильде Гостиничный Бизнес",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  
   "dependencies": {
     "express": "^4.18.2",
-    "puppeteer-core": "^24.25.0" 
+    "puppeteer-core": "^22.0.0",
+    "@sparticuz/chromium": "^123.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
-  
 }
