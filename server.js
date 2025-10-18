@@ -1,107 +1,150 @@
+// Подключаем библиотеки
 const express = require('express');
+
+// Импортируем puppeteer-core и @sparticuz/chromium НА ВЕРХНЕМ УРОВНЕ
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 
-// Промежуточное ПО для CORS (если нужно)
+// --- Настройка CORS ---
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,HEAD,OPTIONS,POST,PUT');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  next();
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
 });
+// --- Конец настройки CORS ---
 
-// Промежуточное ПО для парсинга JSON
-app.use(express.json());
-
-// --- Функция для автоматического парсинга ---
-let cachedData = null;
+// Переменная для хранения последних данных
+let cachedData = [];
 let lastFetchTime = null;
 
+// Функция для парсинга данных
 async function fetchDataAndCache() {
-  console.log('Запуск автоматического парсинга...');
+    console.log('Запуск автоматического парсинга...');
+    let browser;
+    try {
+        // Запускаем браузер с помощью @sparticuz/chromium
+        browser = await puppeteer.launch({
+            executablePath: await chromium.executablePath(), // Указываем путь к Chromium
+            headless: chromium.headless, // Используем headless режим от chromium
+            args: [
+                ...chromium.args, // Аргументы от chromium
+                '--disable-web-security', // Дополнительные аргументы
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-software-rasterizer'
+            ],
+            defaultViewport: chromium.defaultViewport, // Используем viewport от chromium
+        });
 
-  let browser;
-  try {
-    // Запуск браузера с использованием @sparticuz/chromium
-    browser = await puppeteer.launch({
-      executablePath: await chromium.executablePath(), // Путь к Chromium
-      args: [...chromium.args, '--disable-web-security'], // Аргументы для серверной среды
-      defaultViewport: chromium.defaultViewport,
-      headless: chromium.headless,
-    });
+        const page = await browser.newPage();
 
-    const page = await browser.newPage();
+        // Устанавливаем User-Agent, чтобы не выглядеть как бот
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
-    // Пример: переход на сайт и извлечение данных
-    await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2' }); // Замените на ваш URL
+        // Переходим на сайт
+        await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // Пример извлечения данных
-    const data = await page.evaluate(() => {
-      // Пример: извлечение заголовка
-      const title = document.querySelector('h1')?.innerText;
-      return { title };
-    });
+        // Ждём, пока появится хотя бы один элемент .hotel-card (или .hotel-card.map)
+        await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 15000 });
+        console.log('Найдены карточки объектов, начинаем парсинг...');
 
-    // Обновление кэша
-    cachedData = data;
-    lastFetchTime = new Date();
+        // Извлекаем названия и цены из карточек объектов
+        const objectsData = await page.evaluate(() => {
+            // Ищем карточки (обычные и с .map)
+            const hotelCards = Array.from(document.querySelectorAll('.hotel-card, .hotel-card.map'));
 
-    console.log('Данные успешно получены и закэшированы:', data);
+            return hotelCards.map(card => {
+                // Находим название (внутри h2 с классом hotel-info__title)
+                const titleElement = card.querySelector('h2.hotel-info__title span');
+                // Иногда заголовок может быть без span
+                let title;
+                if (!titleElement) {
+                    const titleElementFallback = card.querySelector('h2.hotel-info__title');
+                    title = titleElementFallback ? titleElementFallback.innerText.trim() : 'Название не найдено';
+                } else {
+                    title = titleElement ? titleElement.innerText.trim() : 'Название не найдено';
+                }
 
-  } catch (error) {
-    console.error('Ошибка при автоматическом парсинге:', error.message);
-    // Можно оставить старые данные, если они были
-  } finally {
-    if (browser) {
-      await browser.close();
+                // Находим цену (внутри div с классом price-column)
+                // Цена может быть внутри .price-info__current-price или просто в .price-column
+                let priceElement = card.querySelector('.price-info__current-price');
+                if (!priceElement) {
+                    priceElement = card.querySelector('.price-column');
+                }
+                const price = priceElement ? priceElement.innerText.trim() : 'Цена не найдена';
+
+                // Возвращаем объект с данными
+                return {
+                    title: title,
+                    price: price
+                };
+            });
+        });
+
+        console.log('Найденные объекты:', objectsData);
+
+        // Добавляем фиктивные координаты и ID
+        cachedData = objectsData.map((obj, index) => ({
+            id: index + 1,
+            title: obj.title,
+            price: obj.price,
+            // ВНИМАНИЕ: координаты фиктивные, нужно добавить реальные
+            coords: [55.0 + index * 0.001, 37.0 + index * 0.001]
+        }));
+
+        lastFetchTime = new Date();
+        console.log(`Парсинг завершён. Обновлено ${cachedData.length} объектов. Время: ${lastFetchTime}`);
+
+    } catch (error) {
+        console.error('Ошибка при автоматическом парсинге:', error.message); // Выводим сообщение об ошибке
+        // В реальном приложении логируйте ошибки в файл или систему логирования
+    } finally {
+        // Обязательно закрываем браузер, даже если произошла ошибка
+        if (browser) {
+            await browser.close();
+        }
     }
-  }
 }
 
-// --- Маршрут для получения кэшированных данных ---
-app.get('/data', (req, res) => {
-  if (cachedData) {
-    res.json({
-      success: true,
-      data: cachedData,
-      lastFetched: lastFetchTime,
-    });
-  } else {
-    res.status(204).json({
-      success: false,
-      message: 'Данные еще не были получены.',
-      lastFetched: lastFetchTime,
-    });
-  }
+// Запускаем первый парсинг при старте сервера
+fetchDataAndCache();
+
+// Устанавливаем интервал для автоматического обновления (например, раз в 24 часа)
+// 24 часа * 60 минут * 60 секунд * 1000 миллисекунд = 86400000 миллисекунд
+const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
+
+setInterval(fetchDataAndCache, REFRESH_INTERVAL_MS);
+
+// Маршрут для получения данных
+app.get('/api/objects', (req, res) => {
+    console.log('Получен запрос на /api/objects');
+    // Возвращаем закешированные данные
+    res.json(cachedData);
 });
 
-// --- Маршрут для ручного запуска парсинга ---
-app.post('/fetch', async (req, res) => {
-  try {
-    await fetchDataAndCache();
+// Маршрут для проверки статуса
+app.get('/status', (req, res) => {
     res.json({
-      success: true,
-      message: 'Парсинг завершен.',
-      lastFetched: lastFetchTime,
+        status: 'OK',
+        cachedObjectsCount: cachedData.length,
+        lastFetchTime: lastFetchTime ? lastFetchTime.toISOString() : null,
+        uptime: process.uptime()
     });
-  } catch (error) {
-    console.error('Ошибка при ручном парсинге:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Произошла ошибка при парсинге.',
-      error: error.message,
-    });
-  }
 });
 
-// --- Запуск сервера ---
+// Запускаем сервер, слушаем 0.0.0.0 (важно для Render)
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Сервер запущен на порту ${PORT}`);
-
-  // Запуск автоматического парсинга при старте сервера
-  fetchDataAndCache();
+    console.log(`Сервер запущен на порту ${PORT}`);
+}).on('error', (err) => {
+    console.error('Ошибка при запуске сервера:', err);
 });
-
