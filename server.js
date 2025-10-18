@@ -30,8 +30,9 @@ async function fetchDataAndCache() {
     const puppeteer = require('puppeteer'); // Импортируем внутри функции
     try {
         // На некоторых хостингах (например, Render) могут потребоваться аргументы для headless Chrome
-        const browser = await puppeteer.launch({
-            headless: 'new', // Используем новый headless режим
+       const browser = await puppeteer.launch({
+            headless: 'new',
+            executablePath: '/usr/bin/google-chrome-stable', // Указываем путь к установленному Chrome
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -138,3 +139,4 @@ app.listen(PORT, () => {
 }).on('error', (err) => {
     console.error('Ошибка при запуске сервера:', err);
 });
+
