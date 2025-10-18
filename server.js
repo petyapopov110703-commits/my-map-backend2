@@ -1,7 +1,4 @@
-// Подключаем библиотеки
 const express = require('express');
-
-// Импортируем puppeteer-core и @sparticuz/chromium НА ВЕРХНЕМ УРОВНЕ
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
@@ -103,25 +100,51 @@ async function fetchDataAndCache() {
                     imageUrls.push('https://via.placeholder.com/300x200?text=No+Image');
                 }
 
+                // --- ПАРСИМ КООРДИНАТЫ ИЗ data-marker-id ---
+                // Ищем элемент, который содержит data-marker-id
+                // На основе скриншота, это div с классом .custom-marker
+                const markerElement = card.querySelector('.custom-marker'); // Или другой селектор, если структура отличается
+                let coords = [55.0, 37.0]; // Фиктивные координаты по умолчанию
+
+                if (markerElement) {
+                    const markerId = markerElement.getAttribute('data-marker-id');
+                    if (markerId) {
+                        // Разбиваем строку по запятой
+                        const parts = markerId.split(',');
+                        if (parts.length >= 2) {
+                            // Берем последние два числа как долготу и широту
+                            const lonStr = parts[parts.length - 2];
+                            const latStr = parts[parts.length - 1];
+
+                            const lon = parseFloat(lonStr);
+                            const lat = parseFloat(latStr);
+
+                            if (!isNaN(lon) && !isNaN(lat)) {
+                                coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
+                            }
+                        }
+                    }
+                }
+
                 // Возвращаем объект с данными (используем английские ключи)
                 return {
                     title: title,
                     price: price,
-                    imageUrls: imageUrls // <-- Теперь массив URL изображений
+                    imageUrls: imageUrls, // <-- Теперь массив URL изображений
+                    coords: coords        // <-- Добавляем поле с координатами
                 };
             });
         });
 
-        console.log('Найденные объекты:', objectsData);
+        console.log('Найденные объекты (с координатами):', objectsData);
 
-        // Добавляем фиктивные координаты и ID
+        // Добавляем ID
         cachedData = objectsData.map((obj, index) => ({
             id: index + 1,
             title: obj.title, // <-- используем согласованный ключ
             price: obj.price, // <-- используем согласованный ключ
             imageUrls: obj.imageUrls, // <-- используем согласованный ключ
-            // ВНИМАНИЕ: координаты фиктивные, нужно добавить реальные
-            coords: [55.0 + index * 0.001, 37.0 + index * 0.001]
+            coords: obj.coords // <-- используем согласованный ключ
         }));
 
         lastFetchTime = new Date();
