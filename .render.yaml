@@ -8,7 +8,6 @@ services:
       - key: NODE_VERSION
         value: "22.16.0"
     # Команды, которые нужно выполнить перед сборкой
-    # Используем альтернативный способ установки Chrome, как рекомендовано Render
     preInstallCommands:
       # 1. Установка wget и gnupg для добавления ключа
       - apt-get update && apt-get install -y wget gnupg
