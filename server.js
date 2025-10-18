@@ -1,32 +1,56 @@
+// server.js
+
 // Подключаем библиотеки
 const express = require('express');
-const puppeteer = require('puppeteer');
+// const puppeteer = require('puppeteer'); // Импортируем в функции, чтобы не загружался при запуске, если не нужен
 
-// Создаём веб-приложение
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Запускаем сервер
-app.listen(PORT, () => {
-    console.log(`Сервер запущен на http://localhost:${PORT}`);
+// --- Настройка CORS ---
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
 });
+// --- Конец настройки CORS ---
 
-// Маршрут, который будет возвращать JSON с объектами
-app.get('/api/objects', async (req, res) => {
-    console.log('Получен запрос на получение объектов...');
+// Переменная для хранения последних данных
+let cachedData = [];
+let lastFetchTime = null;
 
-    // Запускаем "виртуальный браузер"
-    let browser;
+// Функция для парсинга данных
+async function fetchDataAndCache() {
+    console.log('Запуск автоматического парсинга...');
+    const puppeteer = require('puppeteer'); // Импортируем внутри функции
     try {
-        browser = await puppeteer.launch({ headless: true });
+        // На некоторых хостингах (например, Render) могут потребоваться аргументы для headless Chrome
+        const browser = await puppeteer.launch({
+            headless: 'new', // Используем новый headless режим
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--disable-software-rasterizer',
+                '--disable-web-security'
+            ]
+        });
         const page = await browser.newPage();
 
+        // Устанавливаем User-Agent, чтобы не выглядеть как бот
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
         // Переходим на сайт
-        await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2' });
+        await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2', timeout: 30000 });
 
         // Ждём, пока появится хотя бы один элемент .hotel-card (или .hotel-card.map)
-        // Попробуем оба селектора
-        await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 10000 }); // Ждём 10 секунд
+        await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 15000 });
         console.log('Найдены карточки объектов, начинаем парсинг...');
 
         // Извлекаем названия и цены из карточек объектов
@@ -61,30 +85,56 @@ app.get('/api/objects', async (req, res) => {
             });
         });
 
+        await browser.close();
+
         console.log('Найденные объекты:', objectsData);
 
         // Добавляем фиктивные координаты и ID
-        const objects = objectsData.map((obj, index) => ({
+        cachedData = objectsData.map((obj, index) => ({
             id: index + 1,
             title: obj.title,
             price: obj.price,
-            coords: [55.0 + index * 0.001, 37.0 + index * 0.001] // Пример координат
+            // ВНИМАНИЕ: координаты фиктивные, нужно добавить реальные
+            coords: [55.0 + index * 0.001, 37.0 + index * 0.001]
         }));
 
-        // Отправляем JSON клиенту
-        res.json(objects);
+        lastFetchTime = new Date();
+        console.log(`Парсинг завершён. Обновлено ${cachedData.length} объектов. Время: ${lastFetchTime}`);
 
     } catch (error) {
-        console.error('Ошибка при парсинге:', error);
-        if (error.name === 'TimeoutError') {
-            res.status(500).json({ error: 'Таймаут: элементы .hotel-card не появились за 10 секунд.' });
-        } else {
-            res.status(500).json({ error: 'Не удалось получить данные' });
-        }
-    } finally {
-        // Обязательно закрываем браузер
-        if (browser) {
-            await browser.close();
-        }
+        console.error('Ошибка при автоматическом парсинге:', error);
+        // В реальном приложении логируйте ошибки в файл или систему логирования
     }
+}
+
+// Запускаем первый парсинг при старте сервера
+fetchDataAndCache();
+
+// Устанавливаем интервал для автоматического обновления (например, раз в 24 часа)
+// 24 часа * 60 минут * 60 секунд * 1000 миллисекунд = 86400000 миллисекунд
+const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
+
+setInterval(fetchDataAndCache, REFRESH_INTERVAL_MS);
+
+// Маршрут для получения данных
+app.get('/api/objects', (req, res) => {
+    console.log('Получен запрос на /api/objects');
+    // Возвращаем закешированные данные
+    res.json(cachedData);
+});
+
+// Маршрут для проверки статуса
+app.get('/status', (req, res) => {
+    res.json({
+        status: 'OK',
+        cachedObjectsCount: cachedData.length,
+        lastFetchTime: lastFetchTime ? lastFetchTime.toISOString() : null,
+        uptime: process.uptime()
+    });
+});
+
+app.listen(PORT, () => {
+    console.log(`Сервер запущен на порту ${PORT}`);
+}).on('error', (err) => {
+    console.error('Ошибка при запуске сервера:', err);
 });
