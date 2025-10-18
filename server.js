@@ -6,7 +6,7 @@ const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 // --- Настройка CORS ---
 app.use((req, res, next) => {
@@ -140,6 +140,19 @@ app.get('/status', (req, res) => {
         lastFetchTime: lastFetchTime ? lastFetchTime.toISOString() : null,
         uptime: process.uptime()
     });
+});
+
+// --- МАРШРУТ ДЛЯ КОРНЕВОГО URL ---
+app.get('/', (req, res) => {
+    res.send(`
+        <h1>✅ Сервер my-map-backend2 запущен!</h1>
+        <p>Данные успешно спарсены: ${cachedData.length} объектов.</p>
+        <p>Последнее обновление: ${lastFetchTime ? lastFetchTime.toLocaleString() : 'ещё не было'}</p>
+        <ul>
+            <li><a href="/api/objects">Посмотреть данные (/api/objects)</a></li>
+            <li><a href="/status">Проверить статус (/status)</a></li>
+        </ul>
+    `);
 });
 
 // Запускаем сервер, слушаем 0.0.0.0 (важно для Render)
