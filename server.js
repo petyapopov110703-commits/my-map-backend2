@@ -70,13 +70,13 @@ async function fetchDataAndCache() {
 
         console.log('Ожидаем появления маркеров...');
 
-        // --- ЖДЕМ, ПОКА ПОЯВЯТСЯ МАРКЕРЫ ---
+        // --- ЖДЕМ, ПОКА ПОЯВЯТСЯ МАРКЕРЫ (ymaps.ymaps3x0--marker) ---
         try {
-            // Ожидаем, пока появится хотя бы один маркер
-            await page.waitForSelector('.custom-marker', { timeout: 15000 });
-            console.log('Найдены маркеры.');
+            // Ожидаем, пока появится хотя бы один маркер Яндекс Карт
+            await page.waitForSelector('ymaps.ymaps3x0--marker', { timeout: 15000 });
+            console.log('Найдены маркеры Яндекс Карт.');
         } catch (waitError) {
-            console.error('Ошибка ожидания маркеров:', waitError.message);
+            console.error('Ошибка ожидания маркеров Яндекс Карт:', waitError.message);
             throw waitError;
         }
 
@@ -85,46 +85,55 @@ async function fetchDataAndCache() {
         // --- ПАРСИНГ ДАННЫХ ДЛЯ КАЖДОГО МАРКЕРА ---
         const objectsData = [];
 
-        // Получаем все .custom-marker
-        const customMarkers = await page.$$('.custom-marker');
+        // Получаем все маркеры Яндекс Карт (ymaps.ymaps3x0--marker)
+        const ymapsMarkers = await page.$$('.ymaps3x0--marker');
 
-        for (let i = 0; i < customMarkers.length; i++) {
-            console.log(`Обработка маркера ${i + 1} из ${customMarkers.length}...`);
+        for (let i = 0; i < ymapsMarkers.length; i++) {
+            console.log(`Обработка маркера ${i + 1} из ${ymapsMarkers.length}...`);
 
-            // Кликаем на маркер
-            await customMarkers[i].click();
+            // Кликаем на маркер Яндекс Карт
+            await ymapsMarkers[i].click();
 
-            // Ждём появление всплывающего окна (balloon)
-            // Селектор для всплывающего окна Яндекс Карты
-            const balloonSelector = '.ymaps3x0--balloon';
+            // Ждём появление контейнера с карточками (например, .card.fixed или .popup)
+            // Судя по видео, это может быть div с классом .card fixed
+            const cardContainerSelector = '.card.fixed, .popup, .modal';
             try {
-                await page.waitForSelector(balloonSelector, { timeout: 5000 });
-                console.log('Всплывающее окно найдено.');
+                await page.waitForSelector(cardContainerSelector, { timeout: 8000 }); // Увеличили таймаут
+                console.log('Контейнер с карточками найден.');
             } catch (cardError) {
-                console.warn(`Всплывающее окно не появилось для маркера ${i + 1}.`);
-                // Если окно не появилось, пропускаем этот маркер
+                console.warn(`Контейнер с карточками не появился для маркера ${i + 1} после клика.`);
+                // Если контейнер не появился, пропускаем этот маркер
                 continue;
             }
 
-            // --- ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ ВСПЛЫВАЮЩЕГО ОКНА ---
+            // --- ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ КОНТЕЙНЕРА С КАРТОЧКАМИ ---
             const objectData = await page.evaluate(() => {
-                // Ищем элемент с названием объекта внутри всплывающего окна
-                const titleElement = document.querySelector('.ymaps3x0--balloon span.hotel-info__title');
+                // Ищем контейнер с карточками
+                const cardContainer = document.querySelector('.card.fixed, .popup, .modal');
+                if (!cardContainer) {
+                    console.warn('Контейнер с карточками не найден в evaluate.');
+                    return { title: 'Название не найдено', price: 'Цена не найдена', imageUrls: [] };
+                }
+
+                // Ищем элемент с названием объекта внутри контейнера
+                // Судя по видео, название находится в h4 внутри .hotel-info__title
+                const titleElement = cardContainer.querySelector('h4.hotel-info__title, span.hotel-info__title');
                 let title = 'Название не найдено';
                 if (titleElement) {
                     title = titleElement.innerText.trim();
                 }
 
-                // Ищем элемент с ценой внутри всплывающего окна
-                const priceElement = document.querySelector('.ymaps3x0--balloon span.price-info__current-price');
+                // Ищем элемент с ценой внутри контейнера
+                // Судя по видео, цена находится в span.price-info__current-price
+                const priceElement = cardContainer.querySelector('span.price-info__current-price');
                 let price = 'Цена не найдена';
                 if (priceElement) {
                     price = priceElement.innerText.trim();
                 }
 
                 // --- ПАРСИМ ВСЕ ИЗОБРАЖЕНИЯ ---
-                // Ищем все элементы img внутри всплывающего окна
-                const imgElements = document.querySelectorAll('.ymaps3x0--balloon img.hotel-card__image');
+                // Ищем все элементы img внутри контейнера
+                const imgElements = cardContainer.querySelectorAll('img.hotel-card__image');
                 let imageUrls = []; // Массив для хранения URL всех изображений
 
                 if (imgElements.length > 0) {
@@ -149,34 +158,40 @@ async function fetchDataAndCache() {
                 };
             });
 
-            // --- ИЗВЛЕЧЕНИЕ КООРДИНАТ ИЗ data-marker-id ---
-            const markerId = await customMarkers[i].evaluate(el => el.getAttribute('data-marker-id'));
+            // --- ИЗВЛЕЧЕНИЕ КООРДИНАТ ИЗ data-marker-id (находим .custom-marker внутри ymaps.ymaps3x0--marker) ---
             let coords = [55.0, 37.0]; // Фиктивные координаты по умолчанию
 
-            if (markerId) {
-                // Убираем префикс 'group_' перед разбором
-                const cleanedMarkerId = markerId.replace(/^group_/, '');
-                // Разбиваем строку по запятой
-                const parts = cleanedMarkerId.split(',');
-                if (parts.length >= 2) {
-                    // Берем последние два числа как долготу и широту
-                    const lonStr = parts[parts.length - 2];
-                    const latStr = parts[parts.length - 1];
+            // Ищем .custom-marker внутри текущего ymaps.ymaps3x0--marker
+            const customMarkerHandle = await ymapsMarkers[i].$(('.custom-marker'));
+            if (customMarkerHandle) {
+                const markerId = await customMarkerHandle.evaluate(el => el.getAttribute('data-marker-id'));
+                if (markerId) {
+                    // Убираем префикс 'group_' перед разбором
+                    const cleanedMarkerId = markerId.replace(/^group_/, '');
+                    // Разбиваем строку по запятой
+                    const parts = cleanedMarkerId.split(',');
+                    if (parts.length >= 2) {
+                        // Берем последние два числа как долготу и широту
+                        const lonStr = parts[parts.length - 2];
+                        const latStr = parts[parts.length - 1];
 
-                    const lon = parseFloat(lonStr);
-                    const lat = parseFloat(latStr);
+                        const lon = parseFloat(lonStr);
+                        const lat = parseFloat(latStr);
 
-                    if (!isNaN(lon) && !isNaN(lat)) {
-                        coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
-                        console.log(`Найдены координаты для "${objectData.title}": [${lat}, ${lon}]`);
+                        if (!isNaN(lon) && !isNaN(lat)) {
+                            coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
+                            console.log(`Найдены координаты для "${objectData.title}": [${lat}, ${lon}]`);
+                        } else {
+                            console.warn(`Не удалось распарсить координаты для "${objectData.title}": lon=${lonStr}, lat=${latStr} (исходный markerId: ${markerId})`);
+                        }
                     } else {
-                        console.warn(`Не удалось распарсить координаты для "${objectData.title}": lon=${lonStr}, lat=${latStr} (исходный markerId: ${markerId})`);
+                        console.warn(`Неверный формат data-marker-id для "${objectData.title}": "${markerId}"`);
                     }
                 } else {
-                    console.warn(`Неверный формат data-marker-id для "${objectData.title}": "${markerId}"`);
+                    console.warn(`data-marker-id пустой для "${objectData.title}"`);
                 }
             } else {
-                console.warn(`data-marker-id пустой для "${objectData.title}"`);
+                console.warn(`.custom-marker не найден внутри ymaps.ymaps3x0--marker ${i + 1}.`);
             }
 
             // Добавляем ID
@@ -188,20 +203,20 @@ async function fetchDataAndCache() {
                 coords: coords
             });
 
-            // --- ЗАКРЫТИЕ ВСПЛЫВАЮЩЕГО ОКНА ---
-            // Ищем кнопку закрытия (обычно это крестик в правом верхнем углу всплывающего окна Яндекс Карт)
-            // Обычно это <ymaps class="ymaps3x0--balloon__close-button">
-            const closeButton = await page.$('ymaps.ymaps3x0--balloon__close-button');
+            // --- ЗАКРЫТИЕ КОНТЕЙНЕРА С КАРТОЧКАМИ ---
+            // Ищем кнопку закрытия (обычно это крестик в правом верхнем углу контейнера)
+            // Может быть button, svg или div с классом .close, .close-button
+            const closeButton = await page.$('.card.fixed .close, .popup .close, .modal .close, .close-button');
             if (closeButton) {
                 await closeButton.click();
-                console.log('Всплывающее окно закрыто.');
+                console.log('Контейнер с карточками закрыт.');
             } else {
-                console.warn('Кнопка закрытия всплывающего окна не найдена.');
-                // Альтернатива: клик по фону карты (может не сработать или закрыть не то окно)
-                // await page.click('ymaps.ymaps3x0--map');
+                console.warn('Кнопка закрытия контейнера не найдена.');
+                // Альтернатива: клик по фону карты (может не сработать)
+                // await page.click('body');
             }
 
-            // Делаем паузу между кликами, чтобы дать времени на закрытие окна
+            // Делаем паузу между кликами, чтобы дать времени на закрытие контейнера
             await page.waitForTimeout(1000); // Исправлено: await добавлен
         }
 
