@@ -80,9 +80,9 @@ async function fetchDataAndCache() {
             throw waitError;
         }
 
-        console.log('Начинаем парсинг данных для всех маркеров...');
+        console.log('Начинаем парсинг данных для каждого маркера...');
 
-        // --- ПАРСИНГ ДАННЫХ ДЛЯ ВСЕХ МАРКЕРОВ ---
+        // --- ПАРСИНГ ДАННЫХ ДЛЯ КАЖДОГО МАРКЕРА ---
         const objectsData = [];
 
         // Получаем все .custom-marker
@@ -90,6 +90,64 @@ async function fetchDataAndCache() {
 
         for (let i = 0; i < customMarkers.length; i++) {
             console.log(`Обработка маркера ${i + 1} из ${customMarkers.length}...`);
+
+            // Кликаем на маркер
+            await customMarkers[i].click();
+
+            // Ждём появление всплывающего окна (balloon)
+            // Селектор для всплывающего окна Яндекс Карты
+            const balloonSelector = '.ymaps3x0--balloon';
+            try {
+                await page.waitForSelector(balloonSelector, { timeout: 5000 });
+                console.log('Всплывающее окно найдено.');
+            } catch (cardError) {
+                console.warn(`Всплывающее окно не появилось для маркера ${i + 1}.`);
+                // Если окно не появилось, пропускаем этот маркер
+                continue;
+            }
+
+            // --- ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ ВСПЛЫВАЮЩЕГО ОКНА ---
+            const objectData = await page.evaluate(() => {
+                // Ищем элемент с названием объекта внутри всплывающего окна
+                const titleElement = document.querySelector('.ymaps3x0--balloon span.hotel-info__title');
+                let title = 'Название не найдено';
+                if (titleElement) {
+                    title = titleElement.innerText.trim();
+                }
+
+                // Ищем элемент с ценой внутри всплывающего окна
+                const priceElement = document.querySelector('.ymaps3x0--balloon span.price-info__current-price');
+                let price = 'Цена не найдена';
+                if (priceElement) {
+                    price = priceElement.innerText.trim();
+                }
+
+                // --- ПАРСИМ ВСЕ ИЗОБРАЖЕНИЯ ---
+                // Ищем все элементы img внутри всплывающего окна
+                const imgElements = document.querySelectorAll('.ymaps3x0--balloon img.hotel-card__image');
+                let imageUrls = []; // Массив для хранения URL всех изображений
+
+                if (imgElements.length > 0) {
+                    // Проходим по всем img и получаем src
+                    imgElements.forEach(img => {
+                        const src = img.getAttribute('src');
+                        if (src) {
+                            imageUrls.push(src);
+                        }
+                    });
+                }
+
+                // Если нет изображений, добавляем заглушку
+                if (imageUrls.length === 0) {
+                    imageUrls.push('https://via.placeholder.com/300x200?text=No+Image');
+                }
+
+                return {
+                    title: title,
+                    price: price,
+                    imageUrls: imageUrls
+                };
+            });
 
             // --- ИЗВЛЕЧЕНИЕ КООРДИНАТ ИЗ data-marker-id ---
             const markerId = await customMarkers[i].evaluate(el => el.getAttribute('data-marker-id'));
@@ -110,80 +168,41 @@ async function fetchDataAndCache() {
 
                     if (!isNaN(lon) && !isNaN(lat)) {
                         coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
-                        console.log(`Найдены координаты: [${lat}, ${lon}]`);
+                        console.log(`Найдены координаты для "${objectData.title}": [${lat}, ${lon}]`);
                     } else {
-                        console.warn(`Не удалось распарсить координаты: lon=${lonStr}, lat=${latStr} (исходный markerId: ${markerId})`);
+                        console.warn(`Не удалось распарсить координаты для "${objectData.title}": lon=${lonStr}, lat=${latStr} (исходный markerId: ${markerId})`);
                     }
                 } else {
-                    console.warn(`Неверный формат data-marker-id: "${markerId}"`);
+                    console.warn(`Неверный формат data-marker-id для "${objectData.title}": "${markerId}"`);
                 }
             } else {
-                console.warn(`data-marker-id пустой.`);
+                console.warn(`data-marker-id пустой для "${objectData.title}"`);
             }
-
-            // --- ИЗВЛЕЧЕНИЕ НАЗВАНИЯ И ЦЕНЫ ---
-            // Используем точные селекторы из DevTools
-            const objectData = await customMarkers[i].evaluate((markerElement) => {
-                // Ищем родительский контейнер карточки
-                const cardContainer = markerElement.closest('.card.fixed'); // Или другой класс, если нужно
-
-                let title = 'Название не найдено';
-                let price = 'Цена не найдена';
-
-                if (cardContainer) {
-                    // Ищем название
-                    const titleElement = cardContainer.querySelector('span.hotel-info__title');
-                    if (titleElement) {
-                        title = titleElement.innerText.trim();
-                    }
-
-                    // Ищем цену
-                    const priceElement = cardContainer.querySelector('span.price-info__current-price');
-                    if (priceElement) {
-                        price = priceElement.innerText.trim();
-                    }
-                }
-
-                return {
-                    title: title,
-                    price: price
-                };
-            });
-
-            // --- ПАРСИМ ВСЕ ИЗОБРАЖЕНИЯ ---
-            const imageUrls = await customMarkers[i].evaluate((markerElement) => {
-                // Ищем родительский контейнер карточки
-                const cardContainer = markerElement.closest('.card.fixed'); // Или другой класс, если нужно
-
-                let urls = [];
-
-                if (cardContainer) {
-                    // Ищем все img внутри карточки
-                    const imgElements = cardContainer.querySelectorAll('img.hotel-card__image');
-                    imgElements.forEach(img => {
-                        const src = img.getAttribute('src');
-                        if (src) {
-                            urls.push(src);
-                        }
-                    });
-                }
-
-                // Если нет изображений, добавляем заглушку
-                if (urls.length === 0) {
-                    urls.push('https://via.placeholder.com/300x200?text=No+Image');
-                }
-
-                return urls;
-            });
 
             // Добавляем ID
             objectsData.push({
                 id: i + 1,
                 title: objectData.title,
                 price: objectData.price,
-                imageUrls: imageUrls,
+                imageUrls: objectData.imageUrls,
                 coords: coords
             });
+
+            // --- ЗАКРЫТИЕ ВСПЛЫВАЮЩЕГО ОКНА ---
+            // Ищем кнопку закрытия (обычно это крестик в правом верхнем углу всплывающего окна Яндекс Карт)
+            // Обычно это <ymaps class="ymaps3x0--balloon__close-button">
+            const closeButton = await page.$('ymaps.ymaps3x0--balloon__close-button');
+            if (closeButton) {
+                await closeButton.click();
+                console.log('Всплывающее окно закрыто.');
+            } else {
+                console.warn('Кнопка закрытия всплывающего окна не найдена.');
+                // Альтернатива: клик по фону карты (может не сработать или закрыть не то окно)
+                // await page.click('ymaps.ymaps3x0--map');
+            }
+
+            // Делаем паузу между кликами, чтобы дать времени на закрытие окна
+            await page.waitForTimeout(1000); // Исправлено: await добавлен
         }
 
         console.log('Найденные объекты (с координатами):', objectsData);
