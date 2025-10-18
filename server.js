@@ -55,12 +55,15 @@ async function fetchDataAndCache() {
         await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 15000 });
         console.log('Найдены карточки объектов, начинаем парсинг...');
 
-        // --- ИЗМЕНЁННЫЙ БЛОК page.evaluate ---
+        // --- ИЗМЕНЁННЫЙ БЛОК page.evaluate (с отладкой и связыванием по индексу) ---
         const objectsData = await page.evaluate(() => {
             // Ищем карточки (обычные и с .map)
             const hotelCards = Array.from(document.querySelectorAll('.hotel-card, .hotel-card.map'));
 
-            return hotelCards.map(card => {
+            // Ищем все элементы .custom-marker на странице
+            const customMarkers = Array.from(document.querySelectorAll('.custom-marker'));
+
+            return hotelCards.map((card, index) => {
                 // Находим название (внутри h2 с классом hotel-info__title)
                 const titleElement = card.querySelector('h2.hotel-info__title span');
                 // Иногда заголовок может быть без span
@@ -100,11 +103,11 @@ async function fetchDataAndCache() {
                     imageUrls.push('https://via.placeholder.com/300x200?text=No+Image');
                 }
 
-                // --- ПАРСИМ КООРДИНАТЫ ИЗ data-marker-id ---
-                // Ищем элемент, который содержит data-marker-id
-                // На основе скриншота, это div с классом .custom-marker
-                const markerElement = card.querySelector('.custom-marker'); // Или другой селектор, если структура отличается
+                // --- ПАРСИМ КООРДИНАТЫ ИЗ data-marker-id (связывание по индексу) ---
                 let coords = [55.0, 37.0]; // Фиктивные координаты по умолчанию
+
+                // Пытаемся найти соответствующий .custom-marker для этой карточки по индексу
+                const markerElement = customMarkers[index];
 
                 if (markerElement) {
                     const markerId = markerElement.getAttribute('data-marker-id');
@@ -121,9 +124,18 @@ async function fetchDataAndCache() {
 
                             if (!isNaN(lon) && !isNaN(lat)) {
                                 coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
+                                console.log(`Найдены координаты для "${title}": [${lat}, ${lon}]`);
+                            } else {
+                                console.warn(`Не удалось распарсить координаты для "${title}": lon=${lonStr}, lat=${latStr}`);
                             }
+                        } else {
+                            console.warn(`Неверный формат data-marker-id для "${title}": "${markerId}"`);
                         }
+                    } else {
+                        console.warn(`data-marker-id пустой для "${title}"`);
                     }
+                } else {
+                    console.warn(`Не найден .custom-marker для "${title}" (индекс ${index})`);
                 }
 
                 // Возвращаем объект с данными (используем английские ключи)
