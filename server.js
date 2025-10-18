@@ -51,41 +51,63 @@ async function fetchDataAndCache() {
         // Переходим на сайт
         await page.goto('https://homereserve.ru/BeWaidhbbl', { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Ждём, пока появится хотя бы один элемент .hotel-card (или .hotel-card.map)
-        await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 15000 });
-        console.log('Найдены карточки объектов, начинаем парсинг...');
+        console.log('Ожидаем появления маркеров...');
 
-        // --- ИЗМЕНЁННЫЙ БЛОК page.evaluate (с отладкой и связыванием по индексу) ---
-        const objectsData = await page.evaluate(() => {
-            // Ищем карточки (обычные и с .map)
-            const hotelCards = Array.from(document.querySelectorAll('.hotel-card, .hotel-card.map'));
+        // --- ЖДЕМ, ПОКА ПОЯВЯТСЯ МАРКЕРЫ ---
+        try {
+            // Ожидаем, пока появится хотя бы один маркер
+            await page.waitForSelector('.custom-marker', { timeout: 15000 });
+            console.log('Найдены маркеры.');
+        } catch (waitError) {
+            console.error('Ошибка ожидания маркеров:', waitError.message);
+            throw waitError;
+        }
 
-            // Ищем все элементы .custom-marker на странице
-            const customMarkers = Array.from(document.querySelectorAll('.custom-marker'));
+        console.log('Начинаем парсинг данных для каждого маркера...');
 
-            return hotelCards.map((card, index) => {
-                // Находим название (внутри h2 с классом hotel-info__title)
-                const titleElement = card.querySelector('h2.hotel-info__title span');
-                // Иногда заголовок может быть без span
-                let title;
-                if (!titleElement) {
-                    const titleElementFallback = card.querySelector('h2.hotel-info__title');
-                    title = titleElementFallback ? titleElementFallback.innerText.trim() : 'Название не найдено';
-                } else {
-                    title = titleElement ? titleElement.innerText.trim() : 'Название не найдено';
+        // --- ПАРСИНГ ДАННЫХ ДЛЯ КАЖДОГО МАРКЕРА ---
+        const objectsData = [];
+
+        // Получаем все .custom-marker
+        const customMarkers = await page.$$('.custom-marker');
+
+        for (let i = 0; i < customMarkers.length; i++) {
+            console.log(`Обработка маркера ${i + 1} из ${customMarkers.length}...`);
+
+            // Кликаем на маркер
+            await customMarkers[i].click();
+
+            // Ждём появления всплывающей карточки
+            // Предполагаем, что карточка имеет класс .popup или .balloon
+            // Нужно адаптировать под реальную разметку
+            try {
+                await page.waitForSelector('.popup, .balloon, .card', { timeout: 5000 });
+                console.log('Всплывающая карточка найдена.');
+            } catch (cardError) {
+                console.warn(`Всплывающая карточка не появилась для маркера ${i + 1}.`);
+                // Если карточка не появилась, пропускаем этот маркер
+                continue;
+            }
+
+            // --- ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ ВСПЛЫВАЮЩЕЙ КАРТОЧКИ ---
+            const objectData = await page.evaluate(() => {
+                // Ищем элемент с названием объекта
+                const titleElement = document.querySelector('.popup h4, .balloon h4, .card h4'); // Адаптируй селектор
+                let title = 'Название не найдено';
+                if (titleElement) {
+                    title = titleElement.innerText.trim();
                 }
 
-                // Находим цену (внутри div с классом price-column)
-                // Цена может быть внутри .price-info__current-price или просто в .price-column
-                let priceElement = card.querySelector('.price-info__current-price');
-                if (!priceElement) {
-                    priceElement = card.querySelector('.price-column');
+                // Ищем элемент с ценой
+                const priceElement = document.querySelector('.popup .price, .balloon .price, .card .price'); // Адаптируй селектор
+                let price = 'Цена не найдена';
+                if (priceElement) {
+                    price = priceElement.innerText.trim();
                 }
-                const price = priceElement ? priceElement.innerText.trim() : 'Цена не найдена';
 
                 // --- ПАРСИМ ВСЕ ИЗОБРАЖЕНИЯ ---
-                // Ищем все элементы img внутри .hotel-card__slide
-                const imgElements = card.querySelectorAll('.hotel-card__slide img'); // Получаем все img
+                // Ищем все элементы img внутри карточки
+                const imgElements = document.querySelectorAll('.popup img, .balloon img, .card img'); // Адаптируй селектор
                 let imageUrls = []; // Массив для хранения URL всех изображений
 
                 if (imgElements.length > 0) {
@@ -103,61 +125,70 @@ async function fetchDataAndCache() {
                     imageUrls.push('https://via.placeholder.com/300x200?text=No+Image');
                 }
 
-                // --- ПАРСИМ КООРДИНАТЫ ИЗ data-marker-id (связывание по индексу) ---
-                let coords = [55.0, 37.0]; // Фиктивные координаты по умолчанию
-
-                // Пытаемся найти соответствующий .custom-marker для этой карточки по индексу
-                const markerElement = customMarkers[index];
-
-                if (markerElement) {
-                    const markerId = markerElement.getAttribute('data-marker-id');
-                    if (markerId) {
-                        // Разбиваем строку по запятой
-                        const parts = markerId.split(',');
-                        if (parts.length >= 2) {
-                            // Берем последние два числа как долготу и широту
-                            const lonStr = parts[parts.length - 2];
-                            const latStr = parts[parts.length - 1];
-
-                            const lon = parseFloat(lonStr);
-                            const lat = parseFloat(latStr);
-
-                            if (!isNaN(lon) && !isNaN(lat)) {
-                                coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
-                                console.log(`Найдены координаты для "${title}": [${lat}, ${lon}]`);
-                            } else {
-                                console.warn(`Не удалось распарсить координаты для "${title}": lon=${lonStr}, lat=${latStr}`);
-                            }
-                        } else {
-                            console.warn(`Неверный формат data-marker-id для "${title}": "${markerId}"`);
-                        }
-                    } else {
-                        console.warn(`data-marker-id пустой для "${title}"`);
-                    }
-                } else {
-                    console.warn(`Не найден .custom-marker для "${title}" (индекс ${index})`);
-                }
-
-                // Возвращаем объект с данными (используем английские ключи)
                 return {
                     title: title,
                     price: price,
-                    imageUrls: imageUrls, // <-- Теперь массив URL изображений
-                    coords: coords        // <-- Добавляем поле с координатами
+                    imageUrls: imageUrls
                 };
             });
-        });
+
+            // --- ИЗВЛЕЧЕНИЕ КООРДИНАТ ИЗ data-marker-id ---
+            const markerId = await customMarkers[i].evaluate(el => el.getAttribute('data-marker-id'));
+            let coords = [55.0, 37.0]; // Фиктивные координаты по умолчанию
+
+            if (markerId) {
+                // Разбиваем строку по запятой
+                const parts = markerId.split(',');
+                if (parts.length >= 2) {
+                    // Берем последние два числа как долготу и широту
+                    const lonStr = parts[parts.length - 2];
+                    const latStr = parts[parts.length - 1];
+
+                    const lon = parseFloat(lonStr);
+                    const lat = parseFloat(latStr);
+
+                    if (!isNaN(lon) && !isNaN(lat)) {
+                        coords = [lat, lon]; // Яндекс Карты использует [широта, долгота]
+                        console.log(`Найдены координаты для "${objectData.title}": [${lat}, ${lon}]`);
+                    } else {
+                        console.warn(`Не удалось распарсить координаты для "${objectData.title}": lon=${lonStr}, lat=${latStr}`);
+                    }
+                } else {
+                    console.warn(`Неверный формат data-marker-id для "${objectData.title}": "${markerId}"`);
+                }
+            } else {
+                console.warn(`data-marker-id пустой для "${objectData.title}"`);
+            }
+
+            // Добавляем ID
+            objectsData.push({
+                id: i + 1,
+                title: objectData.title,
+                price: objectData.price,
+                imageUrls: objectData.imageUrls,
+                coords: coords
+            });
+
+            // --- ЗАКРЫТИЕ ВСПЛЫВАЮЩЕЙ КАРТОЧКИ ---
+            // Ищем кнопку закрытия (например, с классом .close)
+            const closeButton = await page.$('.popup .close, .balloon .close, .card .close');
+            if (closeButton) {
+                await closeButton.click();
+                console.log('Всплывающая карточка закрыта.');
+            } else {
+                console.warn('Кнопка закрытия не найдена. Карточка может остаться открытой.');
+                // Можно попробовать закрыть карточку другим способом, например, кликом по фону
+                // await page.click('body');
+            }
+
+            // Делаем паузу между кликами, чтобы дать времени на закрытие карточки
+            await page.waitForTimeout(1000);
+        }
 
         console.log('Найденные объекты (с координатами):', objectsData);
 
-        // Добавляем ID
-        cachedData = objectsData.map((obj, index) => ({
-            id: index + 1,
-            title: obj.title, // <-- используем согласованный ключ
-            price: obj.price, // <-- используем согласованный ключ
-            imageUrls: obj.imageUrls, // <-- используем согласованный ключ
-            coords: obj.coords // <-- используем согласованный ключ
-        }));
+        // Сохраняем данные
+        cachedData = objectsData;
 
         lastFetchTime = new Date();
         console.log(`Парсинг завершён. Обновлено ${cachedData.length} объектов. Время: ${lastFetchTime}`);
