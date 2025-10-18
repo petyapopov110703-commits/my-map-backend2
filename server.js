@@ -68,6 +68,10 @@ async function fetchDataAndCache() {
             throw waitError;
         }
 
+        // --- ДАЁМ ВРЕМЯ КАРТЕ ЗАГРУЗИТЬСЯ ПОСЛЕ КЛИКА ПО ТАБУ ---
+        console.log('Ждём загрузки карты после переключения таба...');
+        await page.waitForTimeout(3000); // Ждём 3 секунды
+
         console.log('Ожидаем появления маркеров...');
 
         // --- ЖДЕМ, ПОКА ПОЯВЯТСЯ МАРКЕРЫ (.custom-marker) ---
@@ -98,7 +102,7 @@ async function fetchDataAndCache() {
             // Судя по видео, это может быть div с классом .card fixed
             const cardContainerSelector = '.card.fixed, .popup, .modal';
             try {
-                await page.waitForSelector(cardContainerSelector, { timeout: 8000 }); // Увеличили таймаут
+                await page.waitForSelector(cardContainerSelector, { timeout: 12000 }); // Увеличили таймаут до 12 секунд
                 console.log('Контейнер с карточками найден.');
             } catch (cardError) {
                 console.warn(`Контейнер с карточками не появился для маркера ${i + 1} после клика.`);
