@@ -6,7 +6,7 @@ const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 
 // --- Настройка CORS ---
 app.use((req, res, next) => {
@@ -58,7 +58,7 @@ async function fetchDataAndCache() {
         await page.waitForSelector('.hotel-card, .hotel-card.map', { timeout: 15000 });
         console.log('Найдены карточки объектов, начинаем парсинг...');
 
-        // Извлекаем названия и цены из карточек объектов
+        // --- ИСПРАВЛЕННЫЙ БЛОК page.evaluate ---
         const objectsData = await page.evaluate(() => {
             // Ищем карточки (обычные и с .map)
             const hotelCards = Array.from(document.querySelectorAll('.hotel-card, .hotel-card.map'));
@@ -83,10 +83,10 @@ async function fetchDataAndCache() {
                 }
                 const price = priceElement ? priceElement.innerText.trim() : 'Цена не найдена';
 
-                // Возвращаем объект с данными
+                // Возвращаем объект с данными (используем английские ключи)
                 return {
-                    title: title,
-                    price: price
+                    title: title, // <-- теперь согласованно
+                    price: price  // <-- теперь согласованно
                 };
             });
         });
@@ -96,8 +96,8 @@ async function fetchDataAndCache() {
         // Добавляем фиктивные координаты и ID
         cachedData = objectsData.map((obj, index) => ({
             id: index + 1,
-            title: obj.title,
-            price: obj.price,
+            title: obj.title, // <-- используем согласованный ключ
+            price: obj.price, // <-- используем согласованный ключ
             // ВНИМАНИЕ: координаты фиктивные, нужно добавить реальные
             coords: [55.0 + index * 0.001, 37.0 + index * 0.001]
         }));
