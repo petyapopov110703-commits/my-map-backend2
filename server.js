@@ -146,22 +146,42 @@ async function fetchDataAndCache() {
                 }
 
                 // Запрос к геокодеру Яндекс.Карт
-                // ВАЖНО: замените YOUR_YANDEX_API_KEY на ваш реальный API-ключ
-                const YANDEX_API_KEY = process.env.YANDEX_API_KEY || 'YOUR_YANDEX_API_KEY'; 
+                const YANDEX_API_KEY = process.env.YANDEX_API_KEY || 'YOUR_YANDEX_API_KEY';
                 const response = await fetch(`https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${encodeURIComponent(address)}`);
+
+                // Проверяем, успешен ли HTTP-запрос
+                if (!response.ok) {
+                    console.error(`HTTP ошибка при геокодировании адреса "${address}": ${response.status} ${response.statusText}`);
+                    return { ...obj, coords: null };
+                }
+
                 const data = await response.json();
+                // console.log(`Ответ от геокодера для "${address}":`, JSON.stringify(data, null, 2)); // Логируем ответ для отладки
+
+                // Проверяем, есть ли в ответе ожидаемая структура
+                if (!data.response || !data.response.GeoObjectCollection || !data.response.GeoObjectCollection.featureMember) {
+                    console.warn(`Некорректная структура ответа геокодера для адреса "${address}":`, data);
+                    return { ...obj, coords: null };
+                }
+
                 const firstResult = data.response.GeoObjectCollection.featureMember[0]?.GeoObject;
 
                 if (firstResult) {
                     const coordsStr = firstResult.Point.pos; // "39.707686 55.753703"
                     const [lon, lat] = coordsStr.split(' ').map(Number);
+                    if (isNaN(lat) || isNaN(lon)) {
+                        console.warn(`Некорректные координаты из геокодера для адреса "${address}": ${coordsStr}`);
+                        return { ...obj, coords: null };
+                    }
                     return { ...obj, coords: [lat, lon] }; // [широта, долгота]
                 } else {
                     console.warn(`Не удалось найти координаты для адреса: ${address}`);
                     return { ...obj, coords: null };
                 }
             } catch (err) {
-                console.error(`Ошибка при геокодировании адреса ${obj.address}:`, err.message);
+                console.error(`Ошибка при геокодировании адреса "${obj.address}":`, err.message);
+                // Выводим стек вызовов для лучшего понимания ошибки
+                console.error(err.stack);
                 return { ...obj, coords: null };
             }
         }));
