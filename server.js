@@ -105,23 +105,19 @@ async function fetchDataAndCache() {
                 }
 
                 // --- ПАРСИМ АДРЕС ---
-                // Ищем элемент с адресом (span внутри .hotel-info)
-                // Судя по скриншоту, это span с текстом "Дивеево, Лучистая улица, 5"
-                // Класс span динамический, поэтому ищем по родительскому контейнеру .hotel-info
+                // Ищем span с адресом, который находится на одном уровне с .hotel-info
+                // На основе скриншота: это span с data-v-11c9ea5, содержащий "Дивеево"
                 let address = 'Адрес не найден';
-                const hotelInfo = card.querySelector('.hotel-info');
-                if (hotelInfo) {
-                    // Ищем span внутри .hotel-info
-                    const addressSpan = hotelInfo.querySelector('span');
-                    if (addressSpan) {
-                        address = addressSpan.innerText.trim();
-                    }
+                const addressSpanByAttr = card.querySelector('span[data-v-11c9ea5]');
+                if (addressSpanByAttr) {
+                    address = addressSpanByAttr.innerText.trim();
                 }
-                // Если не нашли, попробуем найти по тексту (если он содержит "Дивеево")
+
+                // Если не нашли по атрибуту, ищем по тексту
                 if (address === 'Адрес не найден') {
                     const allSpans = card.querySelectorAll('span');
                     for (const span of allSpans) {
-                        if (span.innerText.includes('Дивеево')) {
+                        if (span.innerText.includes('Дивеево') && span.innerText.includes('улица')) {
                             address = span.innerText.trim();
                             break;
                         }
