@@ -146,7 +146,8 @@ async function fetchDataAndCache() {
                 }
 
                 // Запрос к геокодеру Яндекс.Карт
-                const YANDEX_API_KEY = process.env.YANDEX_API_KEY || 'YOUR_YANDEX_API_KEY';
+                // Используем переменную окружения, если установлена, иначе ваш ключ
+                const YANDEX_API_KEY = process.env.YANDEX_API_KEY || 'c1a3b274-ff9b-4ff8-b63d-fecf02674203';
                 const response = await fetch(`https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${encodeURIComponent(address)}`);
 
                 // Проверяем, успешен ли HTTP-запрос
