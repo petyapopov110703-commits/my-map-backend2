@@ -107,11 +107,15 @@ async function fetchDataAndCache() {
                 // --- ПАРСИМ АДРЕС ---
                 // Ищем элемент с адресом (span внутри .hotel-info)
                 // Судя по скриншоту, это span с текстом "Дивеево, Лучистая улица, 5"
-                // Класс span динамический, поэтому ищем по содержимому или по родительскому контейнеру
+                // Класс span динамический, поэтому ищем по родительскому контейнеру .hotel-info
                 let address = 'Адрес не найден';
-                const addressElement = card.querySelector('.hotel-info span'); // Ищем span внутри .hotel-info
-                if (addressElement) {
-                    address = addressElement.innerText.trim();
+                const hotelInfo = card.querySelector('.hotel-info');
+                if (hotelInfo) {
+                    // Ищем span внутри .hotel-info
+                    const addressSpan = hotelInfo.querySelector('span');
+                    if (addressSpan) {
+                        address = addressSpan.innerText.trim();
+                    }
                 }
                 // Если не нашли, попробуем найти по тексту (если он содержит "Дивеево")
                 if (address === 'Адрес не найден') {
