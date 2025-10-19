@@ -134,21 +134,52 @@ async function fetchDataAndCache() {
             });
         });
 
-        console.log('Найденные объекты (до добавления координат):', objectsData);
+        console.log('Найденные объекты (до геокодирования):', objectsData);
 
-        // Добавляем адрес в coords (как строку) для использования в Яндекс Карты API
-        cachedData = objectsData.map((obj, index) => ({
+        // --- ГЕОКОДИРОВАНИЕ АДРЕСОВ ---
+        const geocodedData = await Promise.all(objectsData.map(async (obj) => {
+            try {
+                const address = obj.address;
+                if (!address || address === 'Адрес не найден') {
+                    console.warn(`Адрес не найден для объекта: ${obj.title}. Пропускаем геокодирование.`);
+                    return { ...obj, coords: null };
+                }
+
+                // Запрос к геокодеру Яндекс.Карт
+                // ВАЖНО: замените YOUR_YANDEX_API_KEY на ваш реальный API-ключ
+                const YANDEX_API_KEY = process.env.YANDEX_API_KEY || 'YOUR_YANDEX_API_KEY'; 
+                const response = await fetch(`https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${encodeURIComponent(address)}`);
+                const data = await response.json();
+                const firstResult = data.response.GeoObjectCollection.featureMember[0]?.GeoObject;
+
+                if (firstResult) {
+                    const coordsStr = firstResult.Point.pos; // "39.707686 55.753703"
+                    const [lon, lat] = coordsStr.split(' ').map(Number);
+                    return { ...obj, coords: [lat, lon] }; // [широта, долгота]
+                } else {
+                    console.warn(`Не удалось найти координаты для адреса: ${address}`);
+                    return { ...obj, coords: null };
+                }
+            } catch (err) {
+                console.error(`Ошибка при геокодировании адреса ${obj.address}:`, err.message);
+                return { ...obj, coords: null };
+            }
+        }));
+
+        console.log('Данные после геокодирования:', geocodedData);
+
+        // Обновляем кешированные данные
+        cachedData = geocodedData.map((obj, index) => ({
             id: index + 1,
-            title: obj.title, // <-- используем согласованный ключ
-            price: obj.price, // <-- используем согласованный ключ
-            imageUrls: obj.imageUrls, // <-- используем согласованный ключ
-            address: obj.address, // <-- используем согласованный ключ
-            // Передаём адрес в coords как строку для Яндекс Карт
-            coords: obj.address // <-- Передаём адрес как строку
+            title: obj.title,
+            price: obj.price,
+            imageUrls: obj.imageUrls,
+            address: obj.address,
+            coords: obj.coords // <-- Теперь это массив [широта, долгота] или null
         }));
 
         lastFetchTime = new Date();
-        console.log(`Парсинг завершён. Обновлено ${cachedData.length} объектов. Время: ${lastFetchTime}`);
+        console.log(`Парсинг и геокодирование завершены. Обновлено ${cachedData.filter(obj => obj.coords !== null).length} объектов с координатами. Время: ${lastFetchTime}`);
 
     } catch (error) {
         console.error('Ошибка при автоматическом парсинге:', error.message); // Выводим сообщение об ошибке
@@ -160,6 +191,7 @@ async function fetchDataAndCache() {
         }
     }
 }
+
 
 // Запускаем первый парсинг при старте сервера
 fetchDataAndCache();
@@ -182,6 +214,7 @@ app.get('/status', (req, res) => {
     res.json({
         status: 'OK',
         cachedObjectsCount: cachedData.length,
+        cachedObjectsWithCoordsCount: cachedData.filter(obj => obj.coords !== null).length, // Добавлено
         lastFetchTime: lastFetchTime ? lastFetchTime.toISOString() : null,
         uptime: process.uptime()
     });
@@ -191,7 +224,7 @@ app.get('/status', (req, res) => {
 app.get('/', (req, res) => {
     res.send(`
         <h1>✅ Сервер my-map-backend2 запущен!</h1>
-        <p>Данные успешно спарсены: ${cachedData.length} объектов.</p>
+        <p>Данные успешно спарсены: ${cachedData.length} объектов, из них с координатами: ${cachedData.filter(obj => obj.coords !== null).length}.</p>
         <p>Последнее обновление: ${lastFetchTime ? lastFetchTime.toLocaleString() : 'ещё не было'}</p>
         <ul>
             <li><a href="/api/objects">Посмотреть данные (/api/objects)</a></li>
